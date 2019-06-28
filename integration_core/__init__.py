@@ -1,0 +1,1 @@
+from integration_core.integration_base import Integration
