@@ -12,7 +12,7 @@ from collections import OrderedDict
 from IPython.core.magic import (Magics, magics_class, line_magic, cell_magic, line_cell_magic)
 from IPython.core.display import HTML
 
-# Your Specific integration imports go here, make sure they are in requirements!
+# Your Specific integration imports go here, make sure they are in requirements! Examples left in for hive
 import requests
 import socket
 from pyhive import hive as hivemod
@@ -61,15 +61,15 @@ class Integration(Magics):
 
     # Get Env items (User and/or Base URL)
     try:
-        tuser = os.environ['JUPYTER_' + name_str.upper() + '_USER']
+        tuser = os.environ['JUPYTERHUB_' + name_str.upper() + '_USER']
     except:
         tuser = ''
     try:
-        turl = os.environ['JUPYTER_' + name_str.upper() + '_BASE_URL']
+        turl = os.environ['JUPYTERHUB_' + name_str.upper() + '_BASE_URL']
     except:
         turl = ""
 
-    # Hive specific variables
+    # Hive specific variables as examples
     opts[name_str + '_max_rows'] = [1000, 'Max number of rows to return, will potentially add this to queries']
     opts[name_str + '_user'] = [tuser, "User to connect with  - Can be set via ENV Var: JUPYTER_" + name_str.upper() + "_USER otherwise will prompt"]
     opts[name_str + '_base_url'] = [turl, "URL to connect to server. Can be set via ENV Var: JUPYTER_" + name_str.upper() + "_BASE_URL"]
@@ -89,7 +89,7 @@ class Integration(Magics):
                 print("WARNING - BEAKER SUPPORT FAILED")
 
     def retStatus(self):
-        
+
         print("Current State of %s Interface:" % self.name_str.capitalize())
         print("")
         print("{: <30} {: <50}".format(*["Connected:", str(self.connected)]))
@@ -150,7 +150,6 @@ class Integration(Magics):
         else:
             print("You tried to set variable: %s - Not in Allowed options!" % tkey)
 
-
     def disconnect(self):
         if self.connected == True:
             print("Disconnected %s Session from %s" % (self.name_str.capitalize(), self.opts[name_str + '_base_url'][0])
@@ -206,53 +205,95 @@ class Integration(Magics):
         if self.connected != True:
             self.disconnect()
 ##### Where we left off
-    def authHive(self):
-        self.mysession = None
+    def auth(self):
+        self.session = None
         result = -1
         try:
             # To do, allow settings hive setting from ENV
-            self.mysession = hivemod.Connection(host=self.hive_opts['hive_base_url_host'][0], port=self.hive_opts['hive_base_url_port'][0], username=self.hive_opts['hive_user'][0])
+#            self.session = hivemod.Connection(host=self.opts['base_url_host'][0], port=self.opts['base_url_port'][0], username=self.opts['user'][0])
             result = 0
         except:
-            print("Hive Connection Error!")
+            print("%s Connection Error!" % self.name_str.capitalize())
             result = -2
         return result
 
-    def runQuery(self, query):
+
+    def validateQuery(self, query):
+        bRun = True
+        bReRun = False
+        if self.last_query == query:
+            # If the validation allows rerun, that we are here:
+            bReRun = True
+        # Ok, we know if we are rerun or not, so let's now set the last_query 
+        self.last_query = query
+        
+        # Example Validation
+
+        # Warn only - Don't change bRun
+        # This one is looking for a ; in the query. We let it run, but we warn the user
+        # Basically, we print a warning but don't change the bRun variable and the bReRun doesn't matter
         if query.find(";") >= 0:
             print("WARNING - Do not type a trailing semi colon on queries, your query will fail (like it probably did here)")
+
+        # Warn and don't submit after first attempt - Second attempt go ahead and run
+        # If the query doesn't have a day query, then maybe we want to WARN the user and not run the query.
+        # However, if this is the second time in a row that the user has submitted the query, then they must want to run without day
+        # So if bReRun is True, we allow bRun to stay true. This ensures the user to submit after warnings
+        if query.lower().find("day = ") < 0:
+            print("WARNING - Queries shoud have day = component to ensure you don't have to many map tasks")
+            if bReRun == False:
+                print("First Submission - Not Sending to Server - Run again to submit as is")
+                bRun = False
+            else:
+                print("Query will be submitted ")
+        # Warn and do not allow submission
+        # There is no way for a user to submit this query 
+        if query.lower().find('limit ") < 0:
+            print("ERROR - All queries must have a limit clause - Query will not submit without out")
+            bRun = False
+        return bRun
+
+    def runQuery(self, query):
+
         mydf = None
-        if self.hive_connected == True:
-            starttime = int(time.time())
-            try:
-                mydf = pd.read_sql(query, self.mysession)
-                status = "Success"
-            except (TypeError):
-                status = "Success - No Results"
+        status = "-"
+        starttime = int(time.time())
+        run_query = self.validateQuery(query)
+        if run_query:
+            if self.connected == True:
+                try:
+                    mydf = pd.read_sql(query, self.session)
+                    status = "Success"
+                except (TypeError):
+                    status = "Success - No Results"
+                    mydf = None
+                except Exception as e:
+                    str_err = str(e)
+                    if self.opts['verbose_errors'][0] == True:
+                        status = "Failure - query_error: " + str_err
+                    else:
+                        msg_find = "errorMessage=\""
+                        em_start = str_err.find(msg_find)
+                        find_len = len(msg_find)
+                        em_end = str_err[em_start + find_len:].find("\"")
+                        str_out = str_err[em_start + find_len:em_start + em_end + find_len]
+                        status = "Failure - query_error: " + str_out
+            else:
                 mydf = None
-            except Exception as e:
-                str_err = str(e)
-                if self.hive_opts['hive_verbose_errors'][0] == True:
-                    status = "Failure - query_error: " + str_err
-                else:
-                    msg_find = "errorMessage=\""
-                    em_start = str_err.find(msg_find)
-                    find_len = len(msg_find)
-                    em_end = str_err[em_start + find_len:].find("\"")
-                    str_out = str_err[em_start + find_len:em_start + em_end + find_len]
-                    status = "Failure - query_error: " + str_out
-            endtime = int(time.time())
-            query_time = endtime - starttime
+                status = "%d Not Connected" % self.name_str.capitalize()
+
         else:
+            status = "ValidationError"
             mydf = None
-            query_time = 0
-            status = "Hive Not Connected"
+        endtime = int(time.time())
+        query_time = endtime - starttime
 
         return mydf, query_time, status
 
 
-    def displayHelp(self):
-        print("jupyter_hive is a interface that allows you to use the magic function %hive to interact with an Apache Hive installation.")
+# Display Help must be completely customized, please look at this Hive example
+    def displayCustomHelp(self):
+        print("jupyter_hive is a interface that allows you to use the magic function %hive to interact with an Hive installation.")
         print("")
         print("jupyter_hive has two main modes %hive and %%hive")
         print("%hive is for interacting with a Hive installation, connecting, disconnecting, seeing status, etc")
@@ -283,10 +324,14 @@ class Integration(Magics):
         print("- The results, regardless of display will be place in a Pandas Dataframe variable called prev_hive")
         print("- prev_hive is overwritten every time a successful query is run. If you want to save results assign it to a new variable")
 
+    # This is the function that is actually called. 
+    def displayHelp(self):
+        self.displayCustomHelp()
 
-
+    # This is the magic name. I left hive in for an example, this would equate to %hive
     @line_cell_magic
     def hive(self, line, cell=None):
+        # Handle all Line items %hive item1 %hive item2 etc
         if cell is None:
             line = line.replace("\r", "")
             if line == "":
@@ -297,57 +342,45 @@ class Integration(Magics):
                 print("Toggling Debug from %s to %s" % (self.debug, not self.debug))
                 self.debug = not self.debug
             elif line.lower() == "disconnect":
-                self.disconnectHive()
+                self.disconnect()
             elif line.lower() == "connect alt":
-                self.connectHive(True)
+                self.connect(True)
             elif line.lower() == "connect":
-                self.connectHive(False)
-            elif line.lower() .find('set ') == 0:
+                self.connect(False)
+            elif line.lower().find('set ') == 0:
                 self.setvar(line)
             else:
-                print("I am sorry, I don't know what you want to do, try just %hive for help options")
-        else:
+                print("I am sorry, I don't know what you want to do, try just %" + self.name_str + "for help options")
+        else: # This is run is the cell is not none, thus it's a cell to process  - For us, that means a query
             cell = cell.replace("\r", "")
-            if self.hive_connected == True:
+            if self.connected == True:
                 result_df, qtime, status = self.runQuery(cell)
                 if status.find("Failure") == 0:
                     print("Error: %s" % status)
                 elif status.find("Success - No Results") == 0:
                     print("No Results returned in %s seconds" % qtime)
                 else:
-                   self.myip.user_ns['prev_hive'] = result_df
+                   self.myip.user_ns['prev_' + self.name_str] = result_df
                    mycnt = len(result_df)
                    print("%s Records in Approx %s seconds" % (mycnt,qtime))
                    print("")
 
-                   if mycnt <= int(self.hive_opts['pd_display.max_rows'][0]):
+                   if mycnt <= int(self.opts['pd_display.max_rows'][0]):
                        if self.debug:
                            print("Testing max_colwidth: %s" %  pd.get_option('max_colwidth'))
-                       if self.hive_opts['pd_use_beaker'][0] == True:
-                           if self.hive_opts['pd_beaker_bool_workaround'][0]== True:
+                       if self.opts['pd_use_beaker'][0] == True:
+                           if self.opts['pd_beaker_bool_workaround'][0]== True:
                                 for x in result_df.columns:
                                     if result_df.dtypes[x] == 'bool':
                                         result_df[x] = result_df[x].astype(object)
                            display(TableDisplay(result_df))
                        else:
-                           display(HTML(result_df.to_html(index=self.hive_opts['pd_display_idx'][0])))
+                           display(HTML(result_df.to_html(index=self.opts['pd_display_idx'][0])))
                    else:
-                       print("Number of results (%s) greater than pd_display_max(%s)" % (mycnt, self.hive_opts['pd_display.max_rows'][0]))
+                       print("Number of results (%s) greater than pd_display_max(%s)" % (mycnt, self.opts['pd_display.max_rows'][0]))
 
 
             else:
-                print("Hive is not connected: Please see help at %hive  - To Connect: %hive connect")
+                print(self.name_str.capitalize() + " is not connected: Please see help at %" + self.name_str + ")
 
-
-    #Display Only functions
-
-
-    def replaceHTMLCRLF(self, instr):
-        gridhtml = instr.replace("<CR><LF>", "<BR>")
-        gridhtml = gridhtml.replace("<CR>", "<BR>")
-        gridhtml = gridhtml.replace("<LF>", "<BR>")
-        gridhtml = gridhtml.replace("&lt;CR&gt;&lt;LF&gt;", "<BR>")
-        gridhtml = gridhtml.replace("&lt;CR&gt;", "<BR>")
-        gridhtml = gridhtml.replace("&lt;LF&gt;", "<BR>")
-        return gridhtml
 
