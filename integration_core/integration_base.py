@@ -36,7 +36,7 @@ class Integration(Magics):
     session = None    # Session if ingeration uses it
     connected = False # Is the integration connected
     passwd = ""       # If the itegration uses a password, it's temp stored here
-
+    last_query = ""
     name_str = integration
 
     debug = False     # Enable debug mode
@@ -118,7 +118,7 @@ class Integration(Magics):
         print("%s Properties:" %  self.name_str.capitalize())
         print("-----------------------------------")
         for k, v in self.opts.items():
-            if k.find(name_str + "_") == 0:
+            if k.find(self.name_str + "_") == 0:
                 if v[0] is None:
                     o = "None"
                 else:
@@ -130,7 +130,7 @@ class Integration(Magics):
 
     def setvar(self, line):
         pd_set_vars = ['pd_display.max_columns', 'pd_display.max_rows', 'pd_max_colwidth', 'pd_use_beaker']
-        allowed_opts = pd_set_vars + ['pd_replace_crlf', 'pd_display_idx', name_str + '_base_url']
+        allowed_opts = pd_set_vars + ['pd_replace_crlf', 'pd_display_idx', self.name_str + '_base_url']
 
         tline = line.replace('set ', '')
         tkey = tline.split(' ')[0]
@@ -152,7 +152,7 @@ class Integration(Magics):
 
     def disconnect(self):
         if self.connected == True:
-            print("Disconnected %s Session from %s" % (self.name_str.capitalize(), self.opts[name_str + '_base_url'][0])
+            print("Disconnected %s Session from %s" % (self.name_str.capitalize(), self.opts[self.name_str + '_base_url'][0])
         else:
             print("%s Not Currently Connected - Resetting All Variables" % self.name_str.capitalize())
         self.mysession = None
