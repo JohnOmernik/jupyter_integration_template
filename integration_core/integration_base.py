@@ -80,7 +80,8 @@ class Integration(Magics):
     # Class Init function - Obtain a reference to the get_ipython()
     def __init__(self, shell, pd_use_beaker=False, *args, **kwargs):
         super(Integration, self).__init__(shell)
-        self.myip = get_ipython()
+        self.ipy = get_ipython()
+        self.session = None
         self.opts['pd_use_beaker'][0] = pd_use_beaker
         if pd_use_beaker == True:
             try:
@@ -88,78 +89,8 @@ class Integration(Magics):
             except:
                 print("WARNING - BEAKER SUPPORT FAILED")
 
-    def retStatus(self):
-
-        print("Current State of %s Interface:" % self.name_str.capitalize())
-        print("")
-        print("{: <30} {: <50}".format(*["Connected:", str(self.connected)]))
-        print("{: <30} {: <50}".format(*["Debug Mode:", str(self.debug)]))
-
-        print("")
-
-        print("Display Properties:")
-        print("-----------------------------------")
-        for k, v in self.opts.items():
-            if k.find("pd_") == 0:
-                try:
-                    t = int(v[1])
-                except:
-                    t = v[1]
-                if v[0] is None:
-                    o = "None"
-                else:
-                    o = v[0]
-                myrow = [k, o, t]
-                print("{: <30} {: <50} {: <20}".format(*myrow))
-                myrow = []
-
-
-        print("")
-        print("%s Properties:" %  self.name_str.capitalize())
-        print("-----------------------------------")
-        for k, v in self.opts.items():
-            if k.find(self.name_str + "_") == 0:
-                if v[0] is None:
-                    o = "None"
-                else:
-                    o = str(v[0])
-                myrow = [k, o, v[1]]
-                print("{: <30} {: <50} {: <20}".format(*myrow))
-                myrow = []
-
-
-    def setvar(self, line):
-        pd_set_vars = ['pd_display.max_columns', 'pd_display.max_rows', 'pd_max_colwidth', 'pd_use_beaker']
-        allowed_opts = pd_set_vars + ['pd_replace_crlf', 'pd_display_idx', self.name_str + '_base_url']
-
-        tline = line.replace('set ', '')
-        tkey = tline.split(' ')[0]
-        tval = tline.split(' ')[1]
-        if tval == "False":
-            tval = False
-        if tval == "True":
-            tval = True
-        if tkey in allowed_opts:
-            self.opts[tkey][0] = tval
-            if tkey in pd_set_vars:
-                try:
-                    t = int(tval)
-                except:
-                    t = tval
-                pd.set_option(tkey.replace('pd_', ''), t)
-        else:
-            print("You tried to set variable: %s - Not in Allowed options!" % tkey)
-
-    def disconnect(self):
-        if self.connected == True:
-            print("Disconnected %s Session from %s" % (self.name_str.capitalize(), self.opts[self.name_str + '_base_url'][0])
-        else:
-            print("%s Not Currently Connected - Resetting All Variables" % self.name_str.capitalize())
-        self.mysession = None
-        self.connected = False
-
     def connect(self, prompt=False):
-        global tpass
+
         if self.connected == False:
             if prompt == True or self.opts[self.name_str + '_user'][0] == '':
                 print("User not specified in JUPYTER_%s_USER or user override requested" % self.name_str.upper())
@@ -204,6 +135,16 @@ class Integration(Magics):
 
         if self.connected != True:
             self.disconnect()
+
+    def disconnect(self):
+        if self.connected == True:
+            print("Disconnected %s Session from %s" % (self.name_str.capitalize(), self.opts[self.name_str + '_base_url'][0])
+        else:
+            print("%s Not Currently Connected - Resetting All Variables" % self.name_str.capitalize())
+        self.session = None
+        self.connected = False
+
+
 ##### Where we left off
     def auth(self):
         self.session = None
@@ -383,4 +324,66 @@ class Integration(Magics):
             else:
                 print(self.name_str.capitalize() + " is not connected: Please see help at %" + self.name_str + ")
 
+
+    def retStatus(self):
+
+        print("Current State of %s Interface:" % self.name_str.capitalize())
+        print("")
+        print("{: <30} {: <50}".format(*["Connected:", str(self.connected)]))
+        print("{: <30} {: <50}".format(*["Debug Mode:", str(self.debug)]))
+
+        print("")
+
+        print("Display Properties:")
+        print("-----------------------------------")
+        for k, v in self.opts.items():
+            if k.find("pd_") == 0:
+                try:
+                    t = int(v[1])
+                except:
+                    t = v[1]
+                if v[0] is None:
+                    o = "None"
+                else:
+                    o = v[0]
+                myrow = [k, o, t]
+                print("{: <30} {: <50} {: <20}".format(*myrow))
+                myrow = []
+
+
+        print("")
+        print("%s Properties:" %  self.name_str.capitalize())
+        print("-----------------------------------")
+        for k, v in self.opts.items():
+            if k.find(self.name_str + "_") == 0:
+                if v[0] is None:
+                    o = "None"
+                else:
+                    o = str(v[0])
+                myrow = [k, o, v[1]]
+                print("{: <30} {: <50} {: <20}".format(*myrow))
+                myrow = []
+
+
+    def setvar(self, line):
+        pd_set_vars = ['pd_display.max_columns', 'pd_display.max_rows', 'pd_max_colwidth', 'pd_use_beaker']
+        allowed_opts = pd_set_vars + ['pd_replace_crlf', 'pd_display_idx', self.name_str + '_base_url']
+
+        tline = line.replace('set ', '')
+        tkey = tline.split(' ')[0]
+        tval = tline.split(' ')[1]
+        if tval == "False":
+            tval = False
+        if tval == "True":
+            tval = True
+        if tkey in allowed_opts:
+            self.opts[tkey][0] = tval
+            if tkey in pd_set_vars:
+                try:
+                    t = int(tval)
+                except:
+                    t = tval
+                pd.set_option(tkey.replace('pd_', ''), t)
+        else:
+            print("You tried to set variable: %s - Not in Allowed options!" % tkey)
 
